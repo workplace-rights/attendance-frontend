@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>工廠出勤打卡系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --navy: #1a2744;
+  --navy2: #253360;
+  --blue:  #1e5cbf;
+  --blue2: #5b9cf6;
+  --green: #2d7a3a;
+  --green-bg: #eaf3de;
+  --green-text: #2d6a1f;
+  --red: #a32d2d;
+  --red-bg: #fcebeb;
+  --amber: #854f0b;
+  --amber-bg: #faeeda;
+  --gray: #f4f5f7;
+  --gray2: #e8eaed;
+  --border: #d1d5db;
+  --text: #1a1a1a;
+  --text2: #555;
+  --text3: #888;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background: #eef0f5; color: var(--text); }
+
+/* ── Layout ── */
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: #fff; box-shadow: 0 0 40px rgba(0,0,0,.12); }
+.page { flex: 1; display: none; flex-direction: column; }
+.page.active { display: flex; }
+
+/* ── Header ── */
+.hdr {
+  background: var(--navy);
+  color: #fff;
+  padding: .85rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.hdr-left { display: flex; align-items: center; gap: 10px; }
+.hdr-icon { font-size: 22px; }
+.hdr h1 { font-size: 15px; font-weight: 600; }
+.hdr-sub { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 1px; }
+.hdr-right { text-align: right; }
+.clock { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.date-str { font-size: 11px; color: rgba(255,255,255,.5); }
+
+/* ── Bottom Nav ── */
+.bottom-nav {
+  background: #fff; border-top: 1px solid var(--border);
+  display: flex; flex-shrink: 0;
+}
+.nav-item {
+  flex: 1; padding: .7rem .5rem .55rem;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer; border: none; background: none;
+  color: var(--text3); font-size: 10px; transition: color .15s;
+}
+.nav-item.active, .nav-item:hover { color: var(--blue); }
+.nav-item .ni { font-size: 20px; }
+
+/* ── Scrollable content ── */
+.content { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .85rem; }
+
+/* ── Cards ── */
+.card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.15rem; }
+.card-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .85rem; display: flex; align-items: center; gap: 5px; }
+
+/* ── Login ── */
+.login-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 2rem 1.5rem; background: var(--gray); }
+.login-logo { background: var(--navy); color: #fff; width: 72px; height: 72px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 1.5rem; }
+.login-title { font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.login-sub { font-size: 13px; color: var(--text3); margin-bottom: 2rem; }
+.login-box { background: #fff; border-radius: var(--radius); border: 1px solid var(--border); padding: 1.5rem; width: 100%; max-width: 340px; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; }
+.form-group input {
+  width: 100%; padding: .65rem .9rem; border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 15px; outline: none;
+  transition: border-color .15s;
+}
+.form-group input:focus { border-color: var(--blue); }
+.btn-primary {
+  width: 100%; padding: .8rem; background: var(--blue); color: #fff;
+  border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s;
+}
+.btn-primary:hover { opacity: .88; }
+.btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+.err-msg { color: var(--red); font-size: 12px; margin-top: .5rem; text-align: center; }
+
+/* ── Geo Status ── */
+.geo-bar {
+  border-radius: var(--radius-sm); padding: .7rem 1rem;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 500; margin-bottom: .85rem;
+}
+.geo-bar.checking { background: var(--gray); color: var(--text2); }
+.geo-bar.inside   { background: var(--green-bg); color: var(--green-text); }
+.geo-bar.outside  { background: var(--red-bg); color: var(--red); }
+.geo-bar.error    { background: var(--amber-bg); color: var(--amber); }
+.geo-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.geo-dist { font-size: 11px; font-weight: 400; margin-left: auto; color: var(--text3); }
+
+/* ── Punch Button ── */
+.btn-punch {
+  width: 100%; padding: .95rem; border-radius: var(--radius-sm);
+  border: none; font-size: 15px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity .15s, transform .1s;
+  letter-spacing: .02em;
+}
+.btn-punch:active { transform: scale(.98); }
+.btn-punch.in  { background: var(--blue); color: #fff; }
+.btn-punch.out { background: var(--navy); color: #fff; }
+.btn-punch:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+.btn-geo {
+  width: 100%; margin-top: .6rem; padding: .6rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--gray); color: var(--text2);
+  font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.btn-geo:hover { background: var(--gray2); }
+
+/* ── Employee Info ── */
+.emp-row { display: flex; align-items: center; gap: 12px; margin-bottom: .85rem; }
+.avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--navy2); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: var(--blue2); flex-shrink: 0; }
+.emp-name { font-size: 16px; font-weight: 700; }
+.emp-dept { font-size: 12px; color: var(--text2); margin-top: 1px; }
+.emp-id   { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+/* ── Today Stats ── */
+.stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.stat-item { background: var(--gray); border-radius: var(--radius-sm); padding: .65rem; text-align: center; }
+.stat-label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+.stat-val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-val.g { color: var(--green-text); }
+.stat-val.r { color: var(--red); }
+
+/* ── Records ── */
+.rec-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: .6rem .75rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--gray);
+  font-size: 13px; margin-bottom: 5px;
+}
+.rec-type { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; flex-shrink: 0; }
+.rec-in  { background: var(--green-bg); color: var(--green-text); }
+.rec-out { background: #e6f1fb; color: #185fa5; }
+.rec-time { font-weight: 600; }
+.rec-loc  { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+/* ── Admin Table ── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--gray); font-weight: 600; padding: .5rem .6rem; text-align: left; color: var(--text2); white-space: nowrap; }
+td { padding: .5rem .6rem; border-bottom: 1px solid var(--gray2); vertical-align: middle; }
+tr:hover td { background: #fafafa; }
+.badge { font-size: 11px; padding: 2px 7px; border-radius: 20px; font-weight: 600; display: inline-block; }
+.b-active   { background: var(--green-bg); color: var(--green-text); }
+.b-inactive { background: var(--gray2); color: var(--text3); }
+.b-in  { background: var(--green-bg); color: var(--green-text); }
+.b-out { background: #e6f1fb; color: #185fa5; }
+
+/* ── Buttons ── */
+.btn-sm {
+  padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.btn-sm:hover { background: var(--gray); }
+.btn-sm.danger { color: var(--red); border-color: #f5c1c1; }
+.btn-sm.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: .85rem; }
+.btn-toolbar input, .btn-toolbar select {
+  padding: .45rem .7rem; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; outline: none;
+}
+.btn-toolbar input:focus, .btn-toolbar select:focus { border-color: var(--blue); }
+
+/* ── Import ── */
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius-sm);
+  padding: 2rem; text-align: center; cursor: pointer;
+  color: var(--text3); font-size: 13px; transition: border-color .15s, background .15s;
+}
+.drop-zone:hover, .drop-zone.drag { border-color: var(--blue); background: #f0f6ff; }
+.preview-table { max-height: 240px; overflow-y: auto; margin-top: .75rem; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%);
+  background: #1a2744; color: #fff; padding: .6rem 1.2rem;
+  border-radius: 100px; font-size: 13px; font-weight: 600;
+  opacity: 0; transition: opacity .25s; white-space: nowrap; z-index: 999;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.green { background: var(--green); }
+.toast.red   { background: var(--red); }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 500;
+  display: none; align-items: center; justify-content: center; padding: 1rem;
+}
+.modal-overlay.open { display: flex; }
+.modal { background: #fff; border-radius: var(--radius); padding: 1.5rem; width: 100%; max-width: 360px; }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 1rem; }
+.modal .form-group { margin-bottom: .75rem; }
+.modal-actions { display: flex; gap: 8px; margin-top: 1rem; }
+.modal-actions button { flex: 1; padding: .65rem; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: #fff; }
+.modal-actions .confirm { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+/* ── Shift Banner ── */
+.shift-bar { background: var(--navy2); color: rgba(255,255,255,.75); padding: .5rem 1.25rem; font-size: 12px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.shift-tag { background: rgba(255,255,255,.12); border-radius: 20px; padding: 2px 10px; font-size: 11px; color: rgba(255,255,255,.85); }
+.empty-hint { text-align: center; color: var(--text3); font-size: 13px; padding: 1.2rem 0; }
+
+/* ── Section Header ── */
+.sec-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
+.sec-hdr span { font-size: 11px; color: var(--text3); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div class="page active" id="pg-login">
+  <div class="login-wrap">
+    <div class="login-logo">🏭</div>
+    <div class="login-title">工廠出勤打卡系統</div>
+    <div class="login-sub">Factory Attendance System</div>
+    <div class="login-box">
+      <div class="form-group">
+        <label>員工編號</label>
+        <input id="inp-empid" type="text" placeholder="例：EMP001" autocomplete="off" autocapitalize="characters">
+      </div>
+      <div class="form-group">
+        <label>身分證後 4 碼</label>
+        <input id="inp-pw" type="password" placeholder="初始密碼為身分證後4碼" maxlength="4">
+      </div>
+      <button class="btn-primary" id="btn-login" onclick="doLogin()">登入</button>
+      <div class="err-msg" id="login-err"></div>
+    </div>
+    <div style="margin-top:1rem;font-size:11px;color:var(--text3);text-align:center;">
+      管理員帳號：ADMIN　密碼：0000
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="page" id="pg-app">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-icon">🏭</div>
+      <div>
+        <div class="hdr h1">工廠出勤打卡系統</div>
+        <div class="hdr-sub" id="hdr-emp">載入中...</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="clock" id="clockDisplay">--:--:--</div>
+      <div class="date-str" id="dateDisplay"></div>
+    </div>
+  </div>
+  <div class="shift-bar">
+    <span id="shift-geo-label">📍 地理圍欄啟用中</span>
+    <span class="shift-tag">早班 08:00–17:00</span>
+  </div>
+
+  <!-- TAB: 打卡 -->
+  <div class="content" id="tab-punch" style="display:flex;">
+    <div class="card">
+      <div class="card-title">👤 員工資訊</div>
+      <div class="emp-row">
+        <div class="avatar" id="emp-avatar">?</div>
+        <div>
+          <div class="emp-name" id="emp-name">--</div>
+          <div class="emp-dept" id="emp-dept">--</div>
+          <div class="emp-id"   id="emp-id-disp">--</div>
+        </div>
+      </div>
+      <div class="geo-bar checking" id="deviceStatus" style="margin-bottom:.5rem;">
+        <div class="geo-dot"></div>
+        <span id="deviceText">裝置驗證中...</span>
+      </div>
+      <div class="geo-bar checking" id="locStatus" style="margin-bottom:.5rem;">
+        <div class="geo-dot"></div>
+        <span id="locText">尚未偵測地點</span>
+      </div>
+      <div class="geo-bar checking" id="geoStatus">
+        <div class="geo-dot"></div>
+        <span id="geoText">尚未定位，請點選「重新定位」</span>
+        <span class="geo-dist" id="geoDist"></span>
+      </div>
+      <button class="btn-punch in" id="punchBtn" disabled onclick="doPunch()">
+        <span id="punchIcon">👆</span>
+        <span id="punchLabel">上班打卡</span>
+      </button>
+      <button class="btn-geo" onclick="getLocation()">📍 重新定位</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 今日狀態</div>
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="stat-label">上班打卡</div>
+          <div class="stat-val g" id="s-in">--:--</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">下班打卡</div>
+          <div class="stat-val r" id="s-out">--:--</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">工作時數</div>
+          <div class="stat-val" id="s-hours">-- h</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-hdr">
+        <div class="card-title" style="margin:0;">🕐 本日打卡記錄</div>
+      </div>
+      <div id="punch-records"><div class="empty-hint">尚無打卡記錄</div></div>
+    </div>
+
+    <div style="text-align:center;">
+      <button class="btn-sm" style="color:var(--red);" onclick="doLogout()">登出</button>
+    </div>
+  </div>
+
+  <!-- TAB: 記錄 -->
+  <div class="content" id="tab-records" style="display:none;">
+    <div class="card">
+      <div class="card-title">📅 我的打卡記錄</div>
+      <div class="btn-toolbar">
+        <input type="date" id="rec-start" style="flex:1;">
+        <span style="font-size:12px;color:var(--text3);">至</span>
+        <input type="date" id="rec-end" style="flex:1;">
+        <button class="btn-sm primary" onclick="loadMyRecords()">查詢</button>
+      </div>
+      <div class="tbl-wrap">
+        <table id="my-rec-table">
+          <thead><tr><th>日期</th><th>類型</th><th>時間</th></tr></thead>
+          <tbody id="my-rec-body"><tr><td colspan="3" class="empty-hint">請選擇日期查詢</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: 設定 -->
+  <div class="content" id="tab-settings" style="display:none;">
+    <div class="card">
+      <div class="card-title">📱 已綁定裝置</div>
+      <div id="device-info-box" style="font-size:13px;color:var(--text2);padding:.5rem 0;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔒 修改密碼</div>
+      <div class="form-group">
+        <label>新密碼（4碼英數字）</label>
+        <input type="password" id="new-pw" maxlength="4" placeholder="輸入新的4碼密碼">
+      </div>
+      <div class="form-group">
+        <label>確認新密碼</label>
+        <input type="password" id="new-pw2" maxlength="4" placeholder="再輸入一次">
+      </div>
+      <button class="btn-primary" onclick="changePassword()">更新密碼</button>
+    </div>
+  </div>
+
+  <!-- TAB: 管理（僅管理員可見）-->
+  <div class="content" id="tab-admin" style="display:none;">
+
+    <!-- 次選單 -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn-sm primary" onclick="showAdmin('emp')">員工管理</button>
+      <button class="btn-sm" onclick="showAdmin('import')">匯入員工</button>
+      <button class="btn-sm" onclick="showAdmin('locations')">地點管理</button>
+      <button class="btn-sm" onclick="showAdmin('records')">打卡記錄</button>
+      <button class="btn-sm" onclick="showAdmin('export')">匯出報表</button>
+    </div>
+
+    <!-- 員工管理 -->
+    <div class="card" id="adm-emp">
+      <div class="sec-hdr">
+        <div class="card-title" style="margin:0;">👥 員工管理</div>
+        <button class="btn-sm primary" onclick="openAddEmpModal()">＋ 新增</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>編號</th><th>姓名</th><th>部門</th><th>狀態</th><th>裝置綁定</th><th>操作</th></tr></thead>
+          <tbody id="emp-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 地點管理 -->
+    <div class="card" id="adm-locations" style="display:none;">
+      <div class="sec-hdr">
+        <div class="card-title" style="margin:0;">🗺️ 打卡地點管理</div>
+        <button class="btn-sm primary" onclick="openLocModal()">＋ 新增地點</button>
+      </div>
+      <div id="loc-list"></div>
+    </div>
+
+    <!-- 匯入 -->
+    <div class="card" id="adm-import" style="display:none;">
+      <div class="card-title">📤 批量匯入員工</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem;">
+        Excel/CSV 欄位順序：<strong>員工編號、姓名、部門、身分證後4碼</strong>（第一列為標題列）
+      </p>
+      <a id="tmpl-dl" href="#" onclick="downloadTemplate()" style="font-size:12px;color:var(--blue);display:block;margin-bottom:.75rem;">⬇ 下載匯入範本</a>
+      <div class="drop-zone" id="dropZone"
+           onclick="document.getElementById('file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+        📂 點擊或拖曳 Excel / CSV 檔案到此處
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleFile(this.files[0])">
+      </div>
+      <div id="import-preview"></div>
+    </div>
+
+    <!-- 打卡記錄 -->
+    <div class="card" id="adm-records" style="display:none;">
+      <div class="card-title">📋 所有打卡記錄</div>
+      <div class="btn-toolbar">
+        <input type="date" id="adm-start" style="flex:1;">
+        <span style="font-size:12px;color:var(--text3);">至</span>
+        <input type="date" id="adm-end" style="flex:1;">
+        <select id="adm-dept" style="width:80px;"><option value="">所有部門</option></select>
+        <select id="adm-loc"  style="width:90px;"><option value="">所有地點</option></select>
+        <button class="btn-sm primary" onclick="loadAdminRecords()">查詢</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>員工</th><th>部門</th><th>類型</th><th>時間</th><th>地點</th></tr></thead>
+          <tbody id="adm-rec-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 匯出 -->
+    <div class="card" id="adm-export" style="display:none;">
+      <div class="card-title">📊 匯出出勤報表</div>
+      <div class="form-group">
+        <label>起始日期</label>
+        <input type="date" id="exp-start">
+      </div>
+      <div class="form-group">
+        <label>結束日期</label>
+        <input type="date" id="exp-end">
+      </div>
+      <div class="form-group">
+        <label>篩選地點（可不選）</label>
+        <select id="exp-loc" style="width:100%;padding:.45rem .7rem;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;">
+          <option value="">所有地點</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="doExport()">下載 CSV 報表</button>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-punch" onclick="switchTab('punch')">
+      <span class="ni">👆</span><span>打卡</span>
+    </button>
+    <button class="nav-item" id="nav-records" onclick="switchTab('records')">
+      <span class="ni">📋</span><span>記錄</span>
+    </button>
+    <button class="nav-item" id="nav-settings" onclick="switchTab('settings')">
+      <span class="ni">⚙️</span><span>設定</span>
+    </button>
+    <button class="nav-item" id="nav-admin" onclick="switchTab('admin')" style="display:none;">
+      <span class="ni">🛠</span><span>管理</span>
+    </button>
+  </nav>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-add-emp">
+  <div class="modal">
+    <h3>新增員工</h3>
+    <div class="form-group"><label>員工編號 *</label><input id="m-empid" type="text" placeholder="EMP001"></div>
+    <div class="form-group"><label>姓名 *</label><input id="m-name" type="text" placeholder="王小明"></div>
+    <div class="form-group"><label>部門</label><input id="m-dept" type="text" placeholder="生產部"></div>
+    <div class="form-group"><label>身分證後4碼 *（初始密碼）</label><input id="m-last4" type="text" maxlength="4" placeholder="1234"></div>
+    <div class="err-msg" id="m-err"></div>
+    <div class="modal-actions">
+      <button onclick="closeModal('modal-add-emp')">取消</button>
+      <button class="confirm" onclick="addEmployee()">新增</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-loc">
+  <div class="modal" style="max-width:400px;">
+    <h3 id="ml-title">新增地點</h3>
+    <div class="form-group"><label>地點名稱 *</label><input id="ml-name" type="text" placeholder="台灣總部"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div class="form-group"><label>國家 *</label><input id="ml-country" type="text" placeholder="台灣"></div>
+      <div class="form-group"><label>時區 *</label>
+        <select id="ml-tz" style="width:100%;padding:.65rem .7rem;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;">
+          <option value="Asia/Taipei">Asia/Taipei（台灣）</option>
+          <option value="Asia/Tokyo">Asia/Tokyo（日本）</option>
+          <option value="Asia/Shanghai">Asia/Shanghai（中國）</option>
+          <option value="Asia/Hong_Kong">Asia/Hong_Kong（香港）</option>
+          <option value="Asia/Singapore">Asia/Singapore（新加坡）</option>
+          <option value="Asia/Kuala_Lumpur">Asia/Kuala_Lumpur（馬來西亞）</option>
+          <option value="Asia/Bangkok">Asia/Bangkok（泰國）</option>
+          <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh（越南）</option>
+          <option value="Asia/Jakarta">Asia/Jakarta（印尼）</option>
+          <option value="Asia/Manila">Asia/Manila（菲律賓）</option>
+          <option value="Asia/Seoul">Asia/Seoul（韓國）</option>
+          <option value="Asia/Kolkata">Asia/Kolkata（印度）</option>
+          <option value="Europe/London">Europe/London（英國）</option>
+          <option value="Europe/Paris">Europe/Paris（法國/德國）</option>
+          <option value="America/New_York">America/New_York（美東）</option>
+          <option value="America/Los_Angeles">America/Los_Angeles（美西）</option>
+          <option value="UTC">UTC（世界標準時間）</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div class="form-group"><label>緯度 *</label><input id="ml-lat" type="number" step="0.0001" placeholder="25.0375"></div>
+      <div class="form-group"><label>經度 *</label><input id="ml-lng" type="number" step="0.0001" placeholder="121.5637"></div>
+    </div>
+    <div class="form-group">
+      <label>允許打卡半徑（公尺）</label>
+      <input id="ml-radius" type="number" min="10" max="50000" value="300" placeholder="300">
+    </div>
+    <div class="form-group"><label>備註</label><input id="ml-note" type="text" placeholder="選填"></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:.75rem;">💡 GPS 座標可在 Google Maps 上長按廠區取得</div>
+    <div class="err-msg" id="ml-err"></div>
+    <div class="modal-actions">
+      <button onclick="closeModal('modal-loc')">取消</button>
+      <button class="confirm" onclick="saveLocation()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+// ⚠️ 部署後請修改此處為你的 Render 後端網址
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:5000'
+  : 'https://attendance-backend-mt9g.onrender.com'; // ← 部署後替換此行
+
+// 座標設定已移至後端資料庫，由管理員後台「地點管理」統一維護
+
+// ── State ─────────────────────────────────────────────────────────────────
+let TOKEN = localStorage.getItem('att_token') || '';
+let ME = JSON.parse(localStorage.getItem('att_me') || 'null');
+let geoState = 'unknown';
+let lastCoords = null;
+let punchedIn = false;
+
+// ── API ───────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const empId   = document.getElementById('inp-empid').value.trim().toUpperCase();
+  const idLast4 = document.getElementById('inp-pw').value.trim();
+  const errEl   = document.getElementById('login-err');
+  const btn     = document.getElementById('btn-login');
+  if (!empId || !idLast4) { errEl.textContent = '請填寫員工編號與身分證後4碼'; return; }
+  btn.disabled = true; btn.textContent = '登入中...'; errEl.textContent = '';
+  try {
+    const r = await api('POST', '/api/login', { emp_id: empId, id_last4: idLast4 });
+    TOKEN = r.token;
+    ME = r;
+    localStorage.setItem('att_token', TOKEN);
+    localStorage.setItem('att_me', JSON.stringify(ME));
+    initApp();
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '登入';
+  }
+}
+document.getElementById('inp-pw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('inp-empid').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('inp-pw').focus(); });
+
+async function doLogout() {
+  try { await api('POST', '/api/logout'); } catch(e) {}
+  TOKEN = ''; ME = null;
+  localStorage.removeItem('att_token');
+  localStorage.removeItem('att_me');
+  document.getElementById('pg-login').classList.add('active');
+  document.getElementById('pg-app').classList.remove('active');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+function initApp() {
+  if (!ME) return;
+  document.getElementById('pg-login').classList.remove('active');
+  document.getElementById('pg-app').classList.add('active');
+
+  // 員工資訊
+  const initials = ME.name.slice(-2);
+  document.getElementById('emp-avatar').textContent = initials;
+  document.getElementById('emp-name').textContent   = ME.name;
+  document.getElementById('emp-dept').textContent   = ME.dept || '未指定部門';
+  document.getElementById('emp-id-disp').textContent= 'ID：' + ME.emp_id;
+  document.getElementById('hdr-emp').textContent    = ME.name + ' · ' + (ME.dept || '');
+
+  if (ME.is_admin) {
+    document.getElementById('nav-admin').style.display = '';
+  }
+
+  if (!DEVICE_FP) {
+    buildDeviceFingerprint().then(fp => {
+      DEVICE_FP   = fp;
+      DEVICE_NAME = buildDeviceName();
+      updateDeviceStatus();
+    });
+  } else {
+    updateDeviceStatus();
+  }
+  updateDeviceInfoBox();
+  loadTodayRecords();
+  loadLocations().then(() => getLocation());
+  setDefaultDates();
+}
+
+function updateDeviceStatus() {
+  const el  = document.getElementById('deviceStatus');
+  const txt = document.getElementById('deviceText');
+  if (!el) return;
+  if (ME && ME.is_admin) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  if (ME && !ME.device_bound) {
+    el.className = 'geo-bar inside';
+    txt.textContent = '📱 裝置已完成首次綁定（' + DEVICE_NAME + '）';
+  } else {
+    el.className = 'geo-bar inside';
+    txt.textContent = '✅ 裝置驗證通過（' + ((ME && ME.device_name) || DEVICE_NAME) + '）';
+  }
+}
+
+function updateDeviceInfoBox() {
+  const box = document.getElementById('device-info-box');
+  if (!box) return;
+  if (ME && ME.is_admin) {
+    box.innerHTML = '<span style="color:var(--text3);">管理員帳號不限制裝置</span>';
+    return;
+  }
+  if (ME && ME.device_bound) {
+    box.innerHTML = '<span style="color:var(--green-text);">✅ 已綁定：</span>' +
+      '<span style="margin-left:6px;">' + (ME.device_name || '未知裝置') + '</span>' +
+      '<br><span style="font-size:11px;color:var(--text3);margin-top:4px;display:block;">如需換手機請聯繫管理員解除綁定</span>';
+  } else {
+    box.innerHTML = '<span style="color:var(--amber);">⚠️ 尚未綁定裝置，登入時已自動綁定目前裝置</span>';
+  }
+}
+// Auto login if token exists
+if (TOKEN && ME) initApp();
+
+// ── Clock ─────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const days = ['日','一','二','三','四','五','六'];
+  document.getElementById('clockDisplay').textContent =
+    now.toLocaleTimeString('zh-TW', {hour12:false});
+  document.getElementById('dateDisplay').textContent =
+    now.toLocaleDateString('zh-TW') + ' 週' + days[now.getDay()];
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Tab Nav ───────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  ['punch','records','settings','admin'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===tab ? 'flex' : 'none';
+    document.getElementById('nav-'+t)?.classList.toggle('active', t===tab);
+  });
+  if (tab==='records') { setDefaultDates(); }
+  if (tab==='admin')   { loadEmployees(); loadDepts(); showAdmin('emp'); }
+}
+
+function showAdmin(section) {
+  ['emp','import','records','export'].forEach(s =>
+    document.getElementById('adm-'+s).style.display = s===section ? '' : 'none'
+  );
+  if (section==='records') { setDefaultDates(); loadAdminRecords(); }
+}
+
+function setDefaultDates() {
+  const today = new Date().toISOString().slice(0,10);
+  const first = today.slice(0,8) + '01';
+  ['rec-start','adm-start','exp-start'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = first;
+  });
+  ['rec-end','adm-end','exp-end'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = today;
+  });
+}
+
+// ── Geo ───────────────────────────────────────────────────────────────────
+function toRad(d) { return d * Math.PI / 180; }
+function distMeters(lat1,lng1,lat2,lng2) {
+  const R = 6371000;
+  const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── 多地點比對 ─────────────────────────────────────────────────────────────
+async function loadLocations() {
+  try {
+    const locs = await api('GET', '/api/locations');
+    LOCATIONS = locs;
+    return locs;
+  } catch(e) { return []; }
+}
+
+function checkAgainstLocations(lat, lng) {
+  if (!LOCATIONS || LOCATIONS.length === 0) {
+    setGeoUI('outside', '❌ 尚未載入地點資料，請重新整理');
+    setLocUI('error', '地點資料未載入');
+    return;
+  }
+  let best = null, bestDist = Infinity;
+  for (const loc of LOCATIONS) {
+    const d = distMeters(lat, lng, loc.latitude, loc.longitude);
+    if (d < bestDist) { bestDist = d; best = loc; }
+  }
+  matchedLoc = null;
+  let matchedDist = Infinity;
+  for (const loc of LOCATIONS) {
+    const d = distMeters(lat, lng, loc.latitude, loc.longitude);
+    if (d <= loc.radius_m && d < matchedDist) { matchedLoc = loc; matchedDist = d; }
+  }
+  if (matchedLoc) {
+    setGeoUI('inside', '✅ GPS 位置確認，可以打卡', Math.round(matchedDist));
+    setLocUI('inside', '📍 ' + matchedLoc.name + '（' + matchedLoc.country + '）', Math.round(matchedDist));
+  } else {
+    setGeoUI('outside', '❌ 不在任何允許打卡的地點範圍內');
+    setLocUI('outside', best ? '最近地點「' + best.name + '」距離 ' + Math.round(bestDist) + ' 公尺' : '無可用地點');
+  }
+}
+
+function setLocUI(state, text) {
+  const el  = document.getElementById('locStatus');
+  const txt = document.getElementById('locText');
+  if (!el) return;
+  el.className = 'geo-bar ' + state;
+  txt.textContent = text;
+}
+
+function setGeoUI(state, text, dist) {
+  geoState = state;
+  const el  = document.getElementById('geoStatus');
+  const txt = document.getElementById('geoText');
+  const dis = document.getElementById('geoDist');
+  el.className = 'geo-bar ' + state;
+  txt.textContent = text;
+  dis.textContent = dist !== undefined ? Math.round(dist) + 'm 距廠區' : '';
+  const btn = document.getElementById('punchBtn');
+  btn.disabled = state !== 'inside';
+  if (state === 'inside') {
+    btn.className = 'btn-punch ' + (punchedIn ? 'out' : 'in');
+    document.getElementById('punchLabel').textContent = punchedIn ? '下班打卡' : '上班打卡';
+    document.getElementById('punchIcon').textContent  = punchedIn ? '👊' : '👆';
+  }
+}
+
+function getLocation() {
+  setGeoUI('checking', '正在取得位置資訊...');
+  if (!navigator.geolocation) { setGeoUI('error', '瀏覽器不支援定位功能'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
+      lastCoords = { lat, lng, acc };
+      checkAgainstLocations(lat, lng);
+    },
+    err => {
+      const msgs = { 1:'請允許位置存取權限', 2:'無法取得位置，請確認GPS', 3:'定位逾時，請重試' };
+      setGeoUI('error', msgs[err.code] || '定位失敗');
+      setLocUI('error', '位置取得失敗');
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+  );
+}
+
+// ── Punch ─────────────────────────────────────────────────────────────────
+async function doPunch() {
+  if (geoState !== 'inside' || !lastCoords || !matchedLoc) return;
+  const btn = document.getElementById('punchBtn');
+  btn.disabled = true;
+  const type = punchedIn ? 'out' : 'in';
+  try {
+    if (!DEVICE_FP) {
+      DEVICE_FP   = await buildDeviceFingerprint();
+      DEVICE_NAME = buildDeviceName();
+    }
+    await api('POST', '/api/punch', {
+      type,
+      latitude:    lastCoords.lat,
+      longitude:   lastCoords.lng,
+      accuracy:    lastCoords.acc,
+      device_fp:   DEVICE_FP,
+      device_name: DEVICE_NAME
+    });
+    punchedIn = type === 'in';
+    const label = type === 'in' ? '上班' : '下班';
+    showToast('✅ ' + label + '打卡成功 (' + (matchedLoc ? matchedLoc.name : '') + ')', 'green');
+    loadTodayRecords();
+  } catch(e) {
+    showToast('❌ ' + e.message, 'red');
+    btn.disabled = false;
+  }
+}
+// ── My Records ────────────────────────────────────────────────────────────
+async function loadMyRecords() {
+  const start = document.getElementById('rec-start').value;
+  const end   = document.getElementById('rec-end').value;
+  try {
+    const rows = await api('GET', `/api/admin/records?start=${start}&end=${end}`);
+    const mine = rows.filter(r => r.emp_id === ME.emp_id);
+    const tbody = document.getElementById('my-rec-body');
+    if (!mine.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-hint">此區間無記錄</td></tr>'; return; }
+    tbody.innerHTML = mine.map(r => `
+      <tr>
+        <td>${r.punch_time.slice(0,10)}</td>
+        <td><span class="badge ${r.punch_type==='in'?'b-in':'b-out'}">${r.punch_type==='in'?'上班':'下班'}</span></td>
+        <td>${r.punch_time.slice(11,16)}</td>
+      </tr>
+    `).join('');
+  } catch(e) { showToast('查詢失敗：'+e.message, 'red'); }
+}
+
+// ── Change Password ───────────────────────────────────────────────────────
+async function changePassword() {
+  const p1 = document.getElementById('new-pw').value;
+  const p2 = document.getElementById('new-pw2').value;
+  if (p1.length !== 4) { showToast('密碼需為4碼', 'red'); return; }
+  if (p1 !== p2)       { showToast('兩次輸入不一致', 'red'); return; }
+  try {
+    await api('POST', '/api/change_password', { new_last4: p1 });
+    showToast('✅ 密碼已更新', 'green');
+    document.getElementById('new-pw').value = '';
+    document.getElementById('new-pw2').value = '';
+  } catch(e) { showToast('更新失敗：'+e.message, 'red'); }
+}
+
+// ── Admin: Employees ──────────────────────────────────────────────────────
+async function loadEmployees() {
+  try {
+    const rows = await api('GET', '/api/admin/employees');
+    const tbody = document.getElementById('emp-tbody');
+    tbody.innerHTML = rows.map(r => {
+      const hasDev = !!r.device_fp;
+      const devCell = hasDev
+        ? '<span class="badge b-active" title="' + (r.device_name||'') + '">✅ ' + (r.device_name||'已綁定').slice(0,14) + '</span>'
+        : '<span class="badge b-inactive">未綁定</span>';
+      const unbindBtn = (hasDev && r.emp_id !== 'ADMIN')
+        ? '<button class="btn-sm danger" onclick="unbindDevice(\'' + r.emp_id + '\',\'' + r.name + '\')">解除綁定</button>'
+        : '';
+      return '<tr>' +
+        '<td>' + r.emp_id + '</td>' +
+        '<td>' + r.name + '</td>' +
+        '<td>' + (r.dept||'') + '</td>' +
+        '<td><span class="badge ' + (r.is_active?'b-active':'b-inactive') + '">' + (r.is_active?'啟用':'停用') + '</span></td>' +
+        '<td>' + devCell + '</td>' +
+        '<td style="display:flex;gap:4px;flex-wrap:wrap;">' +
+          '<button class="btn-sm ' + (r.is_active?'danger':'') + '" onclick="toggleEmp(\'' + r.emp_id + '\',' + r.is_active + ')">' + (r.is_active?'停用':'啟用') + '</button> ' +
+          '<button class="btn-sm" onclick="promptResetPw(\'' + r.emp_id + '\')">重設密碼</button> ' +
+          unbindBtn +
+        '</td></tr>';
+    }).join('');
+  } catch(e) { showToast('載入失敗：'+e.message, 'red'); }
+}
+
+async function unbindDevice(empId, name) {
+  if (!confirm(`確定要解除 ${name}（${empId}）的裝置綁定？\n解除後，員工下次登入時將重新綁定新裝置。`)) return;
+  try {
+    await api('POST', `/api/admin/employees/${empId}/unbind_device`);
+    showToast('✅ 已解除裝置綁定', 'green');
+    loadEmployees();
+  } catch(e) { showToast('操作失敗：'+e.message, 'red'); }
+}
+
+async function unbindDevice(empId, name) {
+  if (!confirm('確定要解除 ' + name + '（' + empId + '）的裝置綁定？\n解除後員工下次登入時將自動綁定新裝置。')) return;
+  try {
+    await api('POST', '/api/admin/employees/' + empId + '/unbind_device');
+    showToast('✅ 已解除裝置綁定', 'green');
+    loadEmployees();
+  } catch(e) { showToast('操作失敗：' + e.message, 'red'); }
+}
+
+async function toggleEmp(empId, current) {
+  if (!confirm(`確定要${current?'停用':'啟用'}員工 ${empId}？`)) return;
+  try {
+    await api('POST', `/api/admin/employees/${empId}/toggle`);
+    showToast('✅ 已更新', 'green');
+    loadEmployees();
+  } catch(e) { showToast('操作失敗：'+e.message, 'red'); }
+}
+
+async function promptResetPw(empId) {
+  const v = prompt(`重設 ${empId} 的密碼\n請輸入新的身分證後4碼：`);
+  if (!v || v.length !== 4) return;
+  try {
+    await api('POST', `/api/admin/employees/${empId}/reset_password`, { id_last4: v });
+    showToast('✅ 密碼已重設', 'green');
+  } catch(e) { showToast('重設失敗：'+e.message, 'red'); }
+}
+
+function openAddEmpModal() {
+  ['m-empid','m-name','m-dept','m-last4'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-err').textContent = '';
+  document.getElementById('modal-add-emp').classList.add('open');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function addEmployee() {
+  const data = {
+    emp_id:   document.getElementById('m-empid').value.trim().toUpperCase(),
+    name:     document.getElementById('m-name').value.trim(),
+    dept:     document.getElementById('m-dept').value.trim(),
+    id_last4: document.getElementById('m-last4').value.trim()
+  };
+  if (!data.emp_id || !data.name || !data.id_last4) {
+    document.getElementById('m-err').textContent = '請填寫必填欄位'; return;
+  }
+  try {
+    await api('POST', '/api/admin/employees', data);
+    closeModal('modal-add-emp');
+    showToast('✅ 員工已新增', 'green');
+    loadEmployees();
+  } catch(e) { document.getElementById('m-err').textContent = e.message; }
+}
+
+// ── Admin: Import ─────────────────────────────────────────────────────────
+function downloadTemplate() {
+  const data = [
+    ['員工編號','姓名','部門','身分證後4碼'],
+    ['EMP001','王小明','生產部','1234'],
+    ['EMP002','李小華','品管部','5678'],
+    ['EMP003','張大中','倉儲部','9012'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '員工資料');
+  XLSX.writeFile(wb, '員工匯入範本.xlsx');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      // skip header
+      const data = rows.slice(1).filter(r => r.length >= 2).map(r => ({
+        emp_id:   String(r[0]||'').trim().toUpperCase(),
+        name:     String(r[1]||'').trim(),
+        dept:     String(r[2]||'').trim(),
+        id_last4: String(r[3]||'').trim()
+      })).filter(r => r.emp_id && r.name);
+
+      const preview = document.getElementById('import-preview');
+      preview.innerHTML = `
+        <div style="margin-top:.75rem;font-size:12px;color:var(--text2);margin-bottom:.5rem;">
+          共讀取 <strong>${data.length}</strong> 筆，預覽前5筆：
+        </div>
+        <div class="preview-table">
+          <table>
+            <thead><tr><th>編號</th><th>姓名</th><th>部門</th><th>後4碼</th></tr></thead>
+            <tbody>
+              ${data.slice(0,5).map(r=>`<tr><td>${r.emp_id}</td><td>${r.name}</td><td>${r.dept}</td><td>${r.id_last4||'（未填）'}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <button class="btn-primary" style="margin-top:.75rem;" onclick="doImport(${JSON.stringify(data).replace(/"/g,'&quot;')})">
+          確認匯入 ${data.length} 筆員工資料
+        </button>
+      `;
+    } catch(e) { showToast('讀取失敗：'+e.message, 'red'); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+async function doImport(data) {
+  try {
+    const r = await api('POST', '/api/admin/import', { rows: data });
+    showToast(`✅ 匯入成功 ${r.success} 筆${r.failed.length?'，失敗'+r.failed.length+'筆':''}`, 'green');
+    document.getElementById('import-preview').innerHTML = '';
+    loadEmployees();
+  } catch(e) { showToast('匯入失敗：'+e.message, 'red'); }
+}
+
+// ── Admin: Records ────────────────────────────────────────────────────────
+async function loadAdminRecords() {
+  const start = document.getElementById('adm-start').value;
+  const end   = document.getElementById('adm-end').value;
+  const dept  = document.getElementById('adm-dept')?.value || '';
+  const loc   = document.getElementById('adm-loc')?.value  || '';
+  try {
+    const rows = await api('GET', '/api/admin/records?start='+start+'&end='+end+'&dept='+dept+'&location_id='+loc);
+    const tbody = document.getElementById('adm-rec-tbody');
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">無記錄</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r =>
+      '<tr>' +
+      '<td>' + r.emp_id + '<br><span style="font-size:11px;color:var(--text3);">' + r.name + '</span></td>' +
+      '<td>' + (r.dept||'') + '</td>' +
+      '<td><span class="badge ' + (r.punch_type==='in'?'b-in':'b-out') + '">' + (r.punch_type==='in'?'上班':'下班') + '</span></td>' +
+      '<td>' + r.punch_time.slice(0,16) + '</td>' +
+      '<td style="font-size:12px;">' + (r.location_name||'—') + '</td>' +
+      '</tr>'
+    ).join('');
+  } catch(e) { showToast('查詢失敗：'+e.message, 'red'); }
+}
+
+async function loadDepts() {
+  try {
+    const depts = await api('GET', '/api/admin/depts');
+    const sel = document.getElementById('adm-dept');
+    sel.innerHTML = '<option value="">所有部門</option>' +
+      depts.map(d => '<option value="' + d + '">' + d + '</option>').join('');
+  } catch(e) {}
+}
+
+async function loadLocOptions() {
+  try {
+    const locs = await api('GET', '/api/admin/locations');
+    const opt = locs.map(l => '<option value="' + l.id + '">[' + l.country + '] ' + l.name + '</option>').join('');
+    ['adm-loc','exp-loc'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<option value="">所有地點</option>' + opt;
+    });
+  } catch(e) {}
+}
+
+// ── Admin: Export ─────────────────────────────────────────────────────────
+async function doExport() {
+  const start = document.getElementById('exp-start').value;
+  const end   = document.getElementById('exp-end').value;
+  const loc   = document.getElementById('exp-loc')?.value || '';
+  const url = API_BASE + '/api/admin/export_csv?start=' + start + '&end=' + end + '&location_id=' + loc;
+  // Need token in URL since download link can't set headers
+  // Workaround: fetch then blob
+  try {
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + TOKEN } });
+    if (!res.ok) throw new Error('匯出失敗');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `出勤記錄_${start}_${end}.csv`;
+    a.click();
+  } catch(e) { showToast('匯出失敗：'+e.message, 'red'); }
+}
+
+// ── Admin: Locations ──────────────────────────────────────────────────────
+let editingLocId = null;
+
+async function loadAdminLocations() {
+  try {
+    const locs = await api('GET', '/api/admin/locations');
+    const el = document.getElementById('loc-list');
+    if (!locs.length) { el.innerHTML = '<div class="empty-hint">尚無地點，請新增</div>'; return; }
+    el.innerHTML = locs.map(l => {
+      const sb = l.is_active ? '<span class="badge b-active">啟用</span>' : '<span class="badge b-inactive">停用</span>';
+      return '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.65rem .8rem;margin-bottom:6px;">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-size:14px;font-weight:600;">' + l.name + ' ' + sb + '</div>' +
+            '<div style="font-size:11px;color:var(--text3);margin-top:3px;">' +
+              l.country + ' · ' + l.timezone + ' · ' +
+              l.latitude.toFixed(4) + ',' + l.longitude.toFixed(4) +
+              ' · 半徑 ' + l.radius_m + 'm' +
+              (l.note ? ' · ' + l.note : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:4px;flex-shrink:0;">' +
+            '<button class="btn-sm" onclick="openLocModal(' + l.id + ')">編輯</button>' +
+            '<button class="btn-sm ' + (l.is_active?'danger':'') + '" onclick="toggleLoc(' + l.id + ',' + l.is_active + ')">' + (l.is_active?'停用':'啟用') + '</button>' +
+            '<button class="btn-sm danger" onclick="deleteLoc(' + l.id + ','' + l.name.replace(/'/g,"\'") + '')">刪除</button>' +
+          '</div>' +
+        '</div></div>';
+    }).join('');
+  } catch(e) { showToast('載入失敗：'+e.message,'red'); }
+}
+
+async function openLocModal(id) {
+  editingLocId = id || null;
+  document.getElementById('ml-title').textContent = id ? '編輯地點' : '新增地點';
+  document.getElementById('ml-err').textContent = '';
+  if (!id) {
+    ['ml-name','ml-country','ml-lat','ml-lng','ml-note'].forEach(k => document.getElementById(k).value='');
+    document.getElementById('ml-radius').value = '300';
+    document.getElementById('ml-tz').value = 'Asia/Taipei';
+  } else {
+    const locs = await api('GET', '/api/admin/locations');
+    const l = locs.find(x => x.id === id);
+    if (l) {
+      document.getElementById('ml-name').value    = l.name;
+      document.getElementById('ml-country').value = l.country;
+      document.getElementById('ml-tz').value      = l.timezone;
+      document.getElementById('ml-lat').value     = l.latitude;
+      document.getElementById('ml-lng').value     = l.longitude;
+      document.getElementById('ml-radius').value  = l.radius_m;
+      document.getElementById('ml-note').value    = l.note || '';
+    }
+  }
+  document.getElementById('modal-loc').classList.add('open');
+}
+
+async function saveLocation() {
+  const data = {
+    name:      document.getElementById('ml-name').value.trim(),
+    country:   document.getElementById('ml-country').value.trim(),
+    timezone:  document.getElementById('ml-tz').value.trim(),
+    latitude:  parseFloat(document.getElementById('ml-lat').value),
+    longitude: parseFloat(document.getElementById('ml-lng').value),
+    radius_m:  parseInt(document.getElementById('ml-radius').value),
+    note:      document.getElementById('ml-note').value.trim()
+  };
+  if (!data.name || !data.country) { document.getElementById('ml-err').textContent='名稱與國家為必填'; return; }
+  if (isNaN(data.latitude)||isNaN(data.longitude)) { document.getElementById('ml-err').textContent='GPS座標格式錯誤'; return; }
+  try {
+    if (editingLocId) {
+      await api('PUT', '/api/admin/locations/'+editingLocId, data);
+      showToast('✅ 地點已更新','green');
+    } else {
+      await api('POST', '/api/admin/locations', data);
+      showToast('✅ 地點已新增','green');
+    }
+    closeModal('modal-loc');
+    loadAdminLocations();
+    loadLocOptions();
+    loadLocations();
+  } catch(e) { document.getElementById('ml-err').textContent=e.message; }
+}
+
+async function toggleLoc(id, current) {
+  try {
+    await api('POST', '/api/admin/locations/'+id+'/toggle');
+    showToast('✅ 已'+(current?'停用':'啟用'),'green');
+    loadAdminLocations(); loadLocOptions();
+  } catch(e) { showToast('失敗：'+e.message,'red'); }
+}
+
+async function deleteLoc(id, name) {
+  if (!confirm('確定要刪除地點「'+name+'」？\n若已有打卡記錄則無法刪除，請改為停用。')) return;
+  try {
+    const r = await fetch(API_BASE+'/api/admin/locations/'+id,
+      {method:'DELETE',headers:{Authorization:'Bearer '+TOKEN}});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    showToast('✅ 已刪除','green');
+    loadAdminLocations(); loadLocOptions();
+  } catch(e) { showToast('刪除失敗：'+e.message,'red'); }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type?' '+type:'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
