@@ -247,7 +247,7 @@ tr:hover td { background: #fafafa; }
       <div class="err-msg" id="login-err"></div>
     </div>
     <div style="margin-top:1rem;font-size:11px;color:var(--text3);text-align:center;">
-      管理員帳號：ADMIN　密碼：0000
+      如忘記密碼請聯繫管理員重設
     </div>
   </div>
 </div>
@@ -564,6 +564,60 @@ let ME = JSON.parse(localStorage.getItem('att_me') || 'null');
 let geoState = 'unknown';
 let lastCoords = null;
 let punchedIn = false;
+let DEVICE_FP = '';
+let DEVICE_NAME = '';
+let LOCATIONS = [];
+let matchedLoc = null;
+
+
+// ── 裝置指紋產生 ───────────────────────────────────────────────────────────
+async function buildDeviceFingerprint() {
+  const parts = [];
+  parts.push(navigator.userAgent);
+  parts.push(screen.width + 'x' + screen.height + 'x' + screen.colorDepth);
+  parts.push(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  parts.push(navigator.language || '');
+  parts.push(String(navigator.hardwareConcurrency || 0));
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 200; canvas.height = 50;
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(125, 1, 62, 20);
+    ctx.fillStyle = '#069';
+    ctx.fillText('Attendance', 2, 15);
+    ctx.fillStyle = 'rgba(102,204,0,0.7)';
+    ctx.fillText('Attendance', 4, 17);
+    parts.push(canvas.toDataURL().slice(-50));
+  } catch(e) { parts.push('no-canvas'); }
+  const raw = parts.join('||');
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  } catch(e) {
+    let h = 0;
+    for (const ch of raw) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
+    return Math.abs(h).toString(16).padStart(8,'0');
+  }
+}
+
+function buildDeviceName() {
+  const ua = navigator.userAgent;
+  let os = 'Unknown';
+  if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+  else if (/Mac/.test(ua)) os = 'macOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  let br = 'Browser';
+  if (/Chrome/.test(ua) && !/Edg/.test(ua)) br = 'Chrome';
+  else if (/Firefox/.test(ua)) br = 'Firefox';
+  else if (/Safari/.test(ua)) br = 'Safari';
+  else if (/Edg/.test(ua)) br = 'Edge';
+  return br + ' / ' + os;
+}
 
 // ── API ───────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -582,9 +636,14 @@ async function doLogin() {
   const errEl   = document.getElementById('login-err');
   const btn     = document.getElementById('btn-login');
   if (!empId || !idLast4) { errEl.textContent = '請填寫員工編號與身分證後4碼'; return; }
-  btn.disabled = true; btn.textContent = '登入中...'; errEl.textContent = '';
+  btn.disabled = true; btn.textContent = '驗證裝置中...'; errEl.textContent = '';
   try {
-    const r = await api('POST', '/api/login', { emp_id: empId, id_last4: idLast4 });
+    DEVICE_FP   = await buildDeviceFingerprint();
+    DEVICE_NAME = buildDeviceName();
+    const r = await api('POST', '/api/login', {
+      emp_id: empId, id_last4: idLast4,
+      device_fp: DEVICE_FP, device_name: DEVICE_NAME
+    });
     TOKEN = r.token;
     ME = r;
     localStorage.setItem('att_token', TOKEN);
