@@ -951,14 +951,7 @@ async function loadEmployees() {
   } catch(e) { showToast('載入失敗：'+e.message, 'red'); }
 }
 
-async function unbindDevice(empId, name) {
-  if (!confirm(`確定要解除 ${name}（${empId}）的裝置綁定？\n解除後，員工下次登入時將重新綁定新裝置。`)) return;
-  try {
-    await api('POST', `/api/admin/employees/${empId}/unbind_device`);
-    showToast('✅ 已解除裝置綁定', 'green');
-    loadEmployees();
-  } catch(e) { showToast('操作失敗：'+e.message, 'red'); }
-}
+
 
 async function unbindDevice(empId, name) {
   if (!confirm('確定要解除 ' + name + '（' + empId + '）的裝置綁定？\n解除後員工下次登入時將自動綁定新裝置。')) return;
@@ -1164,7 +1157,7 @@ async function loadAdminLocations() {
           '<div style="display:flex;gap:4px;flex-shrink:0;">' +
             '<button class="btn-sm" onclick="openLocModal(' + l.id + ')">編輯</button>' +
             '<button class="btn-sm ' + (l.is_active?'danger':'') + '" onclick="toggleLoc(' + l.id + ',' + l.is_active + ')">' + (l.is_active?'停用':'啟用') + '</button>' +
-            '<button class="btn-sm danger" onclick="deleteLoc(' + l.id + ','' + l.name.replace(/'/g,"\'") + '')">刪除</button>' +
+            '<button class="btn-sm danger" onclick="deleteLoc(' + l.id + ',\"' + l.name + '\")">刪除</button>' +
           '</div>' +
         '</div></div>';
     }).join('');
