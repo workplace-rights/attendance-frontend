@@ -568,6 +568,7 @@ let DEVICE_FP = '';
 let DEVICE_NAME = '';
 let LOCATIONS = [];
 let matchedLoc = null;
+let toastTimer = null;
 
 
 // ── 裝置指紋產生 ───────────────────────────────────────────────────────────
@@ -1236,7 +1237,6 @@ async function deleteLoc(id, name) {
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
-let toastTimer;
 function showToast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg;
