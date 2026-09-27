@@ -303,7 +303,7 @@ tr:hover td { background: #fafafa; }
         <span id="punchIcon">👆</span>
         <span id="punchLabel">上班打卡</span>
       </button>
-      <button class="btn-geo" onclick="getLocation()">📍 重新定位</button>
+      <button class="btn-geo" onclick="reloadAndLocate()">📍 重新定位</button>
     </div>
 
     <div class="card">
@@ -569,6 +569,7 @@ let DEVICE_NAME = '';
 let LOCATIONS = [];
 let matchedLoc = null;
 let toastTimer = null;
+let pendingImportData = [];
 
 
 // ── 裝置指紋產生 ───────────────────────────────────────────────────────────
@@ -697,7 +698,14 @@ function initApp() {
   }
   updateDeviceInfoBox();
   loadTodayRecords();
-  loadLocations().then(() => getLocation());
+  loadLocations().then(locs => {
+    if (locs && locs.length > 0) {
+      getLocation();
+    } else {
+      setLocUI('error', '地點資料未載入，請點「重新定位」');
+      setGeoUI('checking', '等待地點資料...');
+    }
+  });
   setDefaultDates();
 }
 
@@ -790,8 +798,14 @@ async function loadLocations() {
   try {
     const locs = await api('GET', '/api/locations');
     LOCATIONS = locs;
+    if (locs.length === 0) {
+      setLocUI('error', '沒有可用的打卡地點，請聯繫管理員設定');
+    }
     return locs;
-  } catch(e) { return []; }
+  } catch(e) {
+    setLocUI('error', '地點資料載入失敗，請重新整理頁面');
+    return [];
+  }
 }
 
 function checkAgainstLocations(lat, lng) {
@@ -843,6 +857,12 @@ function setGeoUI(state, text, dist) {
     document.getElementById('punchLabel').textContent = punchedIn ? '下班打卡' : '上班打卡';
     document.getElementById('punchIcon').textContent  = punchedIn ? '👊' : '👆';
   }
+}
+
+async function reloadAndLocate() {
+  setLocUI('checking', '重新載入地點資料...');
+  await loadLocations();
+  getLocation();
 }
 
 function getLocation() {
@@ -1041,6 +1061,7 @@ function handleFile(file) {
         dept:     String(r[2]||'').trim(),
         id_last4: String(r[3]||'').trim()
       })).filter(r => r.emp_id && r.name);
+      pendingImportData = data;
 
       const preview = document.getElementById('import-preview');
       preview.innerHTML = `
@@ -1055,7 +1076,7 @@ function handleFile(file) {
             </tbody>
           </table>
         </div>
-        <button class="btn-primary" style="margin-top:.75rem;" onclick="doImport(${JSON.stringify(data).replace(/"/g,'&quot;')})">
+        <button class="btn-primary" style="margin-top:.75rem;" onclick="confirmImport()">
           確認匯入 ${data.length} 筆員工資料
         </button>
       `;
@@ -1067,10 +1088,15 @@ function handleFile(file) {
 async function doImport(data) {
   try {
     const r = await api('POST', '/api/admin/import', { rows: data });
-    showToast(`✅ 匯入成功 ${r.success} 筆${r.failed.length?'，失敗'+r.failed.length+'筆':''}`, 'green');
+    const msg = '✅ 匯入成功 ' + r.success + ' 筆' + (r.failed.length ? '，失敗' + r.failed.length + '筆' : '');
+    showToast(msg, 'green');
     document.getElementById('import-preview').innerHTML = '';
     loadEmployees();
-  } catch(e) { showToast('匯入失敗：'+e.message, 'red'); }
+  } catch(e) { showToast('匯入失敗：' + e.message, 'red'); }
+}
+
+async function confirmImport() {
+  await doImport(pendingImportData);
 }
 
 // ── Admin: Records ────────────────────────────────────────────────────────
