@@ -391,7 +391,10 @@ tr:hover td { background: #fafafa; }
     <div class="card" id="adm-emp">
       <div class="sec-hdr">
         <div class="card-title" style="margin:0;">👥 員工管理</div>
-        <button class="btn-sm primary" onclick="openAddEmpModal()">＋ 新增</button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-sm primary" onclick="openAddEmpModal()">＋ 新增</button>
+          <button class="btn-sm danger" onclick="clearAllRecords()" style="color:var(--red-text);border-color:#f5c1c1;">🗑 清空打卡記錄</button>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table>
@@ -1067,6 +1070,26 @@ async function promptResetPw(empId) {
     await api('POST', `/api/admin/employees/${empId}/reset_password`, { id_last4: v });
     showToast('✅ 密碼已重設', 'green');
   } catch(e) { showToast('重設失敗：'+e.message, 'red'); }
+}
+
+
+async function clearAllRecords() {
+  // 第一次確認
+  if (!confirm('⚠️ 警告！\n\n這將永久刪除【所有員工】的【所有打卡記錄】！\n\n此操作無法復原，請確認已匯出備份。\n\n確定要繼續嗎？')) return;
+  
+  // 第二次確認：輸入確認碼
+  const code = prompt('請輸入確認碼「DELETE」以執行清空操作：');
+  if (code !== 'DELETE') {
+    showToast('確認碼錯誤，操作已取消', 'red');
+    return;
+  }
+
+  try {
+    const r = await api('POST', '/api/admin/records/clear_all', { confirm: 'CONFIRM_DELETE_ALL' });
+    showToast('✅ 已清空 ' + r.deleted + ' 筆打卡記錄', 'green');
+  } catch(e) {
+    showToast('清空失敗：' + e.message, 'red');
+  }
 }
 
 function openAddEmpModal() {
