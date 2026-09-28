@@ -761,14 +761,17 @@ function switchTab(tab) {
     document.getElementById('nav-'+t)?.classList.toggle('active', t===tab);
   });
   if (tab==='records') { setDefaultDates(); }
-  if (tab==='admin')   { loadEmployees(); loadDepts(); showAdmin('emp'); }
+  if (tab==='admin')   { loadEmployees(); loadDepts(); loadLocOptions(); showAdmin('emp'); }
 }
 
 function showAdmin(section) {
-  ['emp','import','records','export'].forEach(s =>
-    document.getElementById('adm-'+s).style.display = s===section ? '' : 'none'
-  );
-  if (section==='records') { setDefaultDates(); loadAdminRecords(); }
+  ['emp','import','locations','records','export'].forEach(s => {
+    const el = document.getElementById('adm-'+s);
+    if (el) el.style.display = s===section ? '' : 'none';
+  });
+  if (section==='records')   { setDefaultDates(); loadAdminRecords(); }
+  if (section==='locations') { loadAdminLocations(); loadLocOptions(); }
+  if (section==='emp')       { loadEmployees(); }
 }
 
 function setDefaultDates() {
@@ -826,11 +829,20 @@ function checkAgainstLocations(lat, lng) {
     if (d <= loc.radius_m && d < matchedDist) { matchedLoc = loc; matchedDist = d; }
   }
   if (matchedLoc) {
-    setGeoUI('inside', '✅ GPS 位置確認，可以打卡', Math.round(matchedDist));
+    setGeoUI('inside', '✅ GPS 位置確認（指定地點）', Math.round(matchedDist));
     setLocUI('inside', '📍 ' + matchedLoc.name + '（' + matchedLoc.country + '）', Math.round(matchedDist));
   } else {
-    setGeoUI('outside', '❌ 不在任何允許打卡的地點範圍內');
-    setLocUI('outside', best ? '最近地點「' + best.name + '」距離 ' + Math.round(bestDist) + ' 公尺' : '無可用地點');
+    // 不在指定地點，但仍可打卡，顯示警示
+    setGeoUI('outside', '⚠️ 非指定地點，打卡將標記為「非指定地點」');
+    setLocUI('outside', best ? '最近地點「' + best.name + '」距離 ' + Math.round(bestDist) + ' 公尺' : '目前無可用地點資料');
+    // 仍然啟用打卡按鈕
+    const btn = document.getElementById('punchBtn');
+    if (btn && lastCoords) {
+      btn.disabled = false;
+      btn.className = 'btn-punch ' + (punchedIn ? 'out' : 'in');
+      document.getElementById('punchLabel').textContent = punchedIn ? '下班打卡' : '上班打卡';
+      document.getElementById('punchIcon').textContent  = punchedIn ? '👊' : '👆';
+    }
   }
 }
 
@@ -847,15 +859,20 @@ function setGeoUI(state, text, dist) {
   const el  = document.getElementById('geoStatus');
   const txt = document.getElementById('geoText');
   const dis = document.getElementById('geoDist');
-  el.className = 'geo-bar ' + state;
-  txt.textContent = text;
-  dis.textContent = dist !== undefined ? Math.round(dist) + 'm 距廠區' : '';
+  if (el) el.className = 'geo-bar ' + state;
+  if (txt) txt.textContent = text;
+  if (dis) dis.textContent = dist !== undefined ? Math.round(dist) + 'm 距廠區' : '';
   const btn = document.getElementById('punchBtn');
-  btn.disabled = state !== 'inside';
-  if (state === 'inside') {
-    btn.className = 'btn-punch ' + (punchedIn ? 'out' : 'in');
-    document.getElementById('punchLabel').textContent = punchedIn ? '下班打卡' : '上班打卡';
-    document.getElementById('punchIcon').textContent  = punchedIn ? '👊' : '👆';
+  // 只要有取得 GPS 座標就可以打卡（不限制必須在指定地點）
+  if (btn) {
+    if (state === 'error' || state === 'checking') {
+      btn.disabled = true;
+    } else {
+      btn.disabled = false;
+      btn.className = 'btn-punch ' + (punchedIn ? 'out' : 'in');
+      document.getElementById('punchLabel').textContent = punchedIn ? '下班打卡' : '上班打卡';
+      document.getElementById('punchIcon').textContent  = punchedIn ? '👊' : '👆';
+    }
   }
 }
 
@@ -885,7 +902,7 @@ function getLocation() {
 
 // ── Punch ─────────────────────────────────────────────────────────────────
 async function doPunch() {
-  if (geoState !== 'inside' || !lastCoords || !matchedLoc) return;
+  if (!lastCoords) return;
   const btn = document.getElementById('punchBtn');
   btn.disabled = true;
   const type = punchedIn ? 'out' : 'in';
@@ -900,11 +917,13 @@ async function doPunch() {
       longitude:   lastCoords.lng,
       accuracy:    lastCoords.acc,
       device_fp:   DEVICE_FP,
-      device_name: DEVICE_NAME
+      device_name: DEVICE_NAME,
+      is_outside:  !matchedLoc
     });
     punchedIn = type === 'in';
     const label = type === 'in' ? '上班' : '下班';
-    showToast('✅ ' + label + '打卡成功 (' + (matchedLoc ? matchedLoc.name : '') + ')', 'green');
+    const locLabel = matchedLoc ? matchedLoc.name : '非指定地點';
+    showToast('✅ ' + label + '打卡成功（' + locLabel + '）', 'green');
     loadTodayRecords();
   } catch(e) {
     showToast('❌ ' + e.message, 'red');
