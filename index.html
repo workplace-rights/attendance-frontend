@@ -881,6 +881,7 @@ function setGeoUI(state, text, dist) {
 async function reloadAndLocate() {
   setLocUI('checking', '重新載入地點資料...');
   await loadLocations();
+  await loadTodayRecords();  // 同時重新載入今日打卡記錄
   getLocation();
 }
 
