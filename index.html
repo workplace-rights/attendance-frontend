@@ -666,6 +666,8 @@ async function doLogout() {
   localStorage.removeItem('att_token');
   localStorage.removeItem('att_me');
   document.getElementById('pg-login').classList.add('active');
+  const na = document.getElementById('nav-admin');
+  if (na) na.style.display = 'none';
   document.getElementById('pg-app').classList.remove('active');
 }
 
@@ -683,9 +685,9 @@ function initApp() {
   document.getElementById('emp-id-disp').textContent= 'ID：' + ME.emp_id;
   document.getElementById('hdr-emp').textContent    = ME.name + ' · ' + (ME.dept || '');
 
-  if (ME.is_admin) {
-    document.getElementById('nav-admin').style.display = '';
-  }
+  // 管理頁籤：只有管理員才顯示，每次登入都強制重設
+  const navAdmin = document.getElementById('nav-admin');
+  if (navAdmin) navAdmin.style.display = ME.is_admin ? 'flex' : 'none';
 
   if (!DEVICE_FP) {
     buildDeviceFingerprint().then(fp => {
@@ -931,6 +933,46 @@ async function doPunch() {
   }
 }
 // ── My Records ────────────────────────────────────────────────────────────
+
+async function loadTodayRecords() {
+  try {
+    const rows = await api('GET', '/api/punch/today');
+    const inR  = rows.find(r => r.punch_type === 'in');
+    const outR = rows.find(r => r.punch_type === 'out');
+    document.getElementById('s-in').textContent  = inR  ? inR.punch_time.slice(11,16)  : '--:--';
+    document.getElementById('s-out').textContent = outR ? outR.punch_time.slice(11,16) : '--:--';
+    const hrEl = document.getElementById('s-hr');
+    if (hrEl) {
+      if (inR && outR) {
+        const mins = Math.round((new Date(outR.punch_time) - new Date(inR.punch_time)) / 60000);
+        hrEl.textContent = (mins/60).toFixed(1) + ' h';
+      } else { hrEl.textContent = '-- h'; }
+    }
+    punchedIn = !!(inR && !outR);
+    const el = document.getElementById('punch-records');
+    if (el) {
+      if (!rows.length) { el.innerHTML = '<div class="empty-hint">尚無打卡記錄</div>'; }
+      else {
+        el.innerHTML = rows.map(r =>
+          '<div class="rec-item">' +
+          '<span class="rec-type ' + (r.punch_type==='in'?'rec-in':'rec-out') + '">' + (r.punch_type==='in'?'上班':'下班') + '</span>' +
+          '<span class="rec-time">' + r.punch_time.slice(11,16) + '</span>' +
+          '<span class="rec-loc">📍 ' + (r.location_name || '已記錄') + '</span>' +
+          '</div>'
+        ).join('');
+      }
+    }
+    // 更新打卡按鈕狀態
+    const btn = document.getElementById('punchBtn');
+    if (btn && lastCoords) {
+      btn.disabled = false;
+      btn.className = 'btn-punch ' + (punchedIn ? 'out' : 'in');
+      document.getElementById('punchLabel').textContent = punchedIn ? '下班打卡' : '上班打卡';
+      document.getElementById('punchIcon').textContent  = punchedIn ? '👊' : '👆';
+    }
+  } catch(e) { /* 靜默失敗 */ }
+}
+
 async function loadMyRecords() {
   const start = document.getElementById('rec-start').value;
   const end   = document.getElementById('rec-end').value;
