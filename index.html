@@ -934,19 +934,19 @@ async function doPunch() {
 async function loadMyRecords() {
   const start = document.getElementById('rec-start').value;
   const end   = document.getElementById('rec-end').value;
+  const tbody = document.getElementById('my-rec-body');
   try {
-    const rows = await api('GET', `/api/admin/records?start=${start}&end=${end}`);
-    const mine = rows.filter(r => r.emp_id === ME.emp_id);
-    const tbody = document.getElementById('my-rec-body');
-    if (!mine.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-hint">此區間無記錄</td></tr>'; return; }
-    tbody.innerHTML = mine.map(r => `
-      <tr>
-        <td>${r.punch_time.slice(0,10)}</td>
-        <td><span class="badge ${r.punch_type==='in'?'b-in':'b-out'}">${r.punch_type==='in'?'上班':'下班'}</span></td>
-        <td>${r.punch_time.slice(11,16)}</td>
-      </tr>
-    `).join('');
-  } catch(e) { showToast('查詢失敗：'+e.message, 'red'); }
+    // 員工查自己的記錄：用 /api/my/records 端點
+    const rows = await api('GET', '/api/my/records?start=' + start + '&end=' + end);
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-hint">此區間無記錄</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r =>
+      '<tr>' +
+      '<td>' + r.punch_time.slice(0,10) + '</td>' +
+      '<td><span class="badge ' + (r.punch_type==='in'?'b-in':'b-out') + '">' + (r.punch_type==='in'?'上班':'下班') + '</span></td>' +
+      '<td>' + r.punch_time.slice(11,16) + '</td>' +
+      '</tr>'
+    ).join('');
+  } catch(e) { showToast('查詢失敗：' + e.message, 'red'); }
 }
 
 // ── Change Password ───────────────────────────────────────────────────────
